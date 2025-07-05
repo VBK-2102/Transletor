@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MedVoice LLM Interface</title>
+    <script type="module">
+        import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
+        
+        // Configure the environment for better browser compatibility
+        env.allowRemoteModels = true;
+        env.allowLocalModels = false;
+        
+        window.pipeline = pipeline;
+        window.transformersReady = true;
+    </script>
+    <style>
+        .language-bubble {
+            position: absolute;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            animation: float 20s infinite ease-in-out;
+            z-index: 1;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0); opacity: 0.3; }
+            50% { transform: translate(-50px, -50px); opacity: 0.7; }
+        }
+        :root {
+            --primary-color: #6366f1;
+            --secondary-color: #a855f7;
+            --border-color: rgba(255, 255, 255, 0.1);
+            --text-color: #ffffff;
+            --background-color: rgba(255, 255, 255, 0.1);
+            --error-color: #ef4444;
+            --success-color: #22c55e;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            line-height: 1.5;
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+            color: var(--text-color);
+            background: linear-gradient(to bottom, #111827, #000000);
+        }
+
+        .container {
+            position: relative;
+            z-index: 10;
+            max-width: 1200px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            border-radius: 1rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .header {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid var(--border-color);
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--primary-color);
+            margin-bottom: 5px;
+        }
+
+        .header p {
+            color: var(--text-muted);
+            font-size: 1rem;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 20px;
+        }
+
+        .left-panel {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid var(--border-color);
+            height: fit-content;
+        }
+
+        .right-panel {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid var(--border-color);
+        }
+
+        .section {
+            margin-bottom: 25px;
+        }
+
+        .section h3 {
+            font-size: 1.1rem;
+            margin-bottom: 15px;
+            color: var(--text-color);
+            font-weight: 600;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--bg-color);
+            color: var(--text-color);
+            font-size: 0.9rem;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .slider {
+            flex: 1;
+            -webkit-appearance: none;
+            height: 6px;
+            border-radius: 3px;
+            background: var(--border-color);
+            outline: none;
+        }
+
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: var(--primary-color);
+            cursor: pointer;
+        }
+
+        .slider::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: var(--primary-color);
+            cursor: pointer;
+            border: none;
+        }
+
+        .slider-value {
+            min-width: 40px;
+            text-align: center;
+            font-size: 0.9rem;
+            color: var(--text-color);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-primary {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: var(--primary-hover);
+        }
+
+        .btn-secondary {
+            background: var(--border-color);
+            color: var(--text-color);
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: #505050;
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .status {
+            padding: 10px;
+            border-radius: 6px;
+            text-align: center;
+            font-size: 0.9rem;
+            margin-top: 15px;
+        }
+
+        .status.ready {
+            background: rgba(76, 175, 80, 0.1);
+            color: var(--success-color);
+            border: 1px solid rgba(76, 175, 80, 0.3);
+        }
+
+        .status.processing {
+            background: rgba(41, 134, 204, 0.1);
+            color: var(--primary-color);
+            border: 1px solid rgba(41, 134, 204, 0.3);
+        }
+
+        .status.error {
+            background: rgba(244, 67, 54, 0.1);
+            color: var(--error-color);
+            border: 1px solid rgba(244, 67, 54, 0.3);
+        }
+
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 20px;
+        }
+
+        .tab {
+            padding: 12px 20px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            color: var(--text-muted);
+            transition: all 0.2s ease;
+        }
+
+        .tab.active {
+            color: var(--primary-color);
+            border-bottom-color: var(--primary-color);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .textarea {
+            width: 100%;
+            height: 300px;
+            padding: 15px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            resize: vertical;
+        }
+
+        .textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            padding: 20px;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: var(--border-color);
+            border-radius: 2px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--primary-color);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+            
+            .left-panel {
+                order: 2;
+            }
+            
+            .right-panel {
+                order: 1;
+            }
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid transparent;
+            border-top: 2px solid var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 8px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <script>
+        const languages = [
+            { name: 'English', type: 'international' },
+            { name: 'Española', type: 'international' },
+            { name: 'Français', type: 'international' },
+            { name: 'हिंदी', type: 'domestic' },
+            { name: 'عربي', type: 'international' },
+            { name: 'ಕನ್ನಡ', type: 'domestic' },
+            { name: 'मराठी', type: 'domestic' },
+            { name: 'தமிழ்', type: 'domestic' },
+            { name: 'తెలుగు', type: 'domestic' },
+            { name: 'हरियाणवी', type: 'domestic' },
+        ];
+
+        function createLanguageBubble(language) {
+            const bubble = document.createElement('div');
+            bubble.className = 'language-bubble';
+            
+            const size = Math.random() * 80 + 40;
+            bubble.style.width = `${size}px`;
+            bubble.style.height = `${size}px`;
+            
+            bubble.style.left = `${Math.random() * 100}vw`;
+            bubble.style.top = `${Math.random() * 100}vh`;
+            
+            const opacity = Math.random() * 0.3 + 0.1;
+            bubble.style.background = language.type === 'domestic'
+                ? `linear-gradient(135deg, rgba(34, 197, 94, ${opacity}) 0%, rgba(16, 185, 129, ${opacity}) 100%)`
+                : `linear-gradient(135deg, rgba(99, 102, 241, ${opacity}) 0%, rgba(168, 85, 247, ${opacity}) 100%)`;
+            
+            bubble.innerHTML = `<div style="text-align: center; color: rgba(255, 255, 255, 0.8)">
+                <div style="font-size: ${size/8}px">${language.name}</div>
+            </div>`;
+            
+            bubble.style.animationDelay = `${Math.random() * 10}s`;
+            bubble.style.animationDuration = `${Math.random() * 10 + 20}s`;
+            
+            document.body.appendChild(bubble);
+        }
+
+        languages.forEach(lang => {
+            for (let i = 0; i < 2; i++) {
+                createLanguageBubble(lang);
+            }
+        });
+    </script>
+    <div class="container">
+        <div class="header">
+            <h1>MedVoice</h1>
+            <p>Doctor-Patient Conversation Analyzer</p>
+        </div>
+
+        <div class="main-content">
+            <div class="left-panel">
+                <div class="section">
+                    <h3>LLM Model</h3>
+                    <div class="form-group">
+                        <select id="modelSelect" class="form-control">
+                            <option value="Xenova/gpt2">GPT-2</option>
+                            <option value="Xenova/distilgpt2">DistilGPT-2 (Faster)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>Generation Parameters</h3>
+                    <div class="form-group">
+                        <label>Temperature: <span id="tempValue">0.7</span></label>
+                        <div class="slider-container">
+                            <input type="range" id="temperature" class="slider" min="0.1" max="1.5" step="0.1" value="0.7">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Max Output Length: <span id="lengthValue">300</span></label>
+                        <div class="slider-container">
+                            <input type="range" id="maxLength" class="slider" min="50" max="1000" step="50" value="300">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>Input File</h3>
+                    <div class="form-group">
+                        <input type="file" id="fileInput" class="form-control" accept=".txt">
+                    </div>
+                    <button id="browseBtn" class="btn btn-secondary">Choose File</button>
+                </div>
+
+                <button id="analyzeBtn" class="btn btn-primary">
+                    <span id="analyzeText">Analyze Conversation</span>
+                </button>
+
+                <div id="status" class="status ready">Ready</div>
+                <div id="progressBar" class="progress-bar" style="display: none;">
+                    <div id="progressFill" class="progress-fill"></div>
+                </div>
+            </div>
+
+            <div class="right-panel">
+                <h3>Analysis Results</h3>
+                <div class="tabs">
+                    <div class="tab active" data-tab="input">Input Conversation</div>
+                    <div class="tab" data-tab="output">Analysis Summary</div>
+                </div>
+
+                <div id="inputTab" class="tab-content active">
+                    <textarea id="inputText" class="textarea" placeholder="Select a text file or paste your doctor-patient conversation here..."></textarea>
+                </div>
+
+                <div id="outputTab" class="tab-content">
+                    <textarea id="outputText" class="textarea" placeholder="Analysis results will appear here..." readonly></textarea>
+                </div>
+                <button id="downloadBtn" style="text-decoration: none; 
+  background-color: #4f46e5;
+  color: white;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+  transition: background-color 0.3s ease, transform 0.2s ease;"
+  onmouseover="this.style.backgroundColor='#4338ca'; this.style.transform='translateY(-2px)'"
+  onmouseout="this.style.backgroundColor='#4f46e5'; this.style.transform='translateY(0)'"
+  onmousedown="this.style.transform='scale(0.98)'; this.style.backgroundColor='#3730a3'"
+  onmouseup="this.style.transform='translateY(-2px)'; this.style.backgroundColor='#4338ca'"><a href="translator.html" style="text-decoration: none;" >
+  ⬅ Back to Translator</a>
+</button>
+            </div>
+        </div>
+
+        <div class="footer">
+            © 2025 MedVoice | Powered by Hugging Face Transformers.js
+        </div>
+    </div>
+
+    <script>
+        class MedVoiceApp {
+            constructor() {
+                this.model = null;
+                this.tokenizer = null;
+                this.isProcessing = false;
+                this.currentModel = 'Xenova/distilgpt2'; // Start with faster model
+                
+                this.initializeElements();
+                this.bindEvents();
+                this.updateSliderValues();
+            }
+
+            initializeElements() {
+                this.elements = {
+                    modelSelect: document.getElementById('modelSelect'),
+                    temperature: document.getElementById('temperature'),
+                    maxLength: document.getElementById('maxLength'),
+                    tempValue: document.getElementById('tempValue'),
+                    lengthValue: document.getElementById('lengthValue'),
+                    fileInput: document.getElementById('fileInput'),
+                    browseBtn: document.getElementById('browseBtn'),
+                    analyzeBtn: document.getElementById('analyzeBtn'),
+                    analyzeText: document.getElementById('analyzeText'),
+                    status: document.getElementById('status'),
+                    progressBar: document.getElementById('progressBar'),
+                    progressFill: document.getElementById('progressFill'),
+                    inputText: document.getElementById('inputText'),
+                    outputText: document.getElementById('outputText'),
+                    tabs: document.querySelectorAll('.tab'),
+                    tabContents: document.querySelectorAll('.tab-content')
+                };
+            }
+
+            bindEvents() {
+                // Slider updates
+                this.elements.temperature.addEventListener('input', () => this.updateSliderValues());
+                this.elements.maxLength.addEventListener('input', () => this.updateSliderValues());
+
+                // File handling
+                this.elements.browseBtn.addEventListener('click', () => this.elements.fileInput.click());
+                this.elements.fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
+
+                // Analysis
+                this.elements.analyzeBtn.addEventListener('click', () => this.analyzeConversation());
+
+                // Tab switching
+                this.elements.tabs.forEach(tab => {
+                    tab.addEventListener('click', () => this.switchTab(tab.dataset.tab));
+                });
+
+                // Model selection
+                this.elements.modelSelect.addEventListener('change', () => this.handleModelChange());
+            }
+
+            updateSliderValues() {
+                this.elements.tempValue.textContent = parseFloat(this.elements.temperature.value).toFixed(1);
+                this.elements.lengthValue.textContent = this.elements.maxLength.value;
+            }
+
+            handleFileSelect(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                if (file.type !== 'text/plain' && !file.name.endsWith('.txt')) {
+                    this.setStatus('Please select a text file (.txt)', 'error');
+                    return;
+                }
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    this.elements.inputText.value = e.target.result;
+                    this.setStatus('File loaded successfully', 'ready');
+                };
+                reader.onerror = () => {
+                    this.setStatus('Error reading file', 'error');
+                };
+                reader.readAsText(file);
+            }
+
+            switchTab(tabName) {
+                // Update tab buttons
+                this.elements.tabs.forEach(tab => {
+                    tab.classList.toggle('active', tab.dataset.tab === tabName);
+                });
+
+                // Update tab content
+                this.elements.tabContents.forEach(content => {
+                    content.classList.toggle('active', content.id === `${tabName}Tab`);
+                });
+            }
+
+            async handleModelChange() {
+                const newModel = this.elements.modelSelect.value;
+                if (newModel !== this.currentModel) {
+                    this.currentModel = newModel;
+                    this.model = null;
+                    this.tokenizer = null;
+                    this.setStatus('Model changed - will load on next analysis', 'ready');
+                }
+            }
+
+            async loadModel() {
+                if (this.tokenizer) return;
+
+                try {
+                    this.setStatus('Loading model...', 'processing');
+                    this.showProgress(20);
+
+                    // Wait for transformers to be ready
+                    while (!window.transformersReady) {
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                    }
+
+                    this.setStatus('Downloading model (this may take a moment)...', 'processing');
+                    this.showProgress(40);
+
+                    // Load the text generation pipeline with the correct model name
+                    this.tokenizer = await window.pipeline('text-generation', this.currentModel, {
+                        quantized: true,
+                        progress_callback: (progress) => {
+                            if (progress.status === 'downloading') {
+                                const percent = Math.round((progress.loaded / progress.total) * 50) + 40;
+                                this.showProgress(percent);
+                                this.setStatus(`Downloading model: ${Math.round((progress.loaded / progress.total) * 100)}%`, 'processing');
+                            }
+                        }
+                    });
+                    
+                    this.showProgress(100);
+                    this.setStatus('Model loaded successfully', 'ready');
+                } catch (error) {
+                    console.error('Error loading model:', error);
+                    this.setStatus(`Error loading model: ${error.message}`, 'error');
+                    throw error;
+                }
+            }
+
+            async analyzeConversation() {
+                if (this.isProcessing) return;
+
+                const inputText = this.elements.inputText.value.trim();
+                if (!inputText) {
+                    this.setStatus('Please provide input conversation text', 'error');
+                    return;
+                }
+
+                this.isProcessing = true;
+                this.elements.analyzeBtn.disabled = true;
+                this.elements.analyzeText.innerHTML = '<span class="loading-spinner"></span>Analyzing...';
+
+                try {
+                    await this.loadModel();
+                    
+                    this.setStatus('Analyzing conversation...', 'processing');
+                    this.showProgress(50);
+
+                    const result = await this.generateAnalysis(inputText);
+                    
+                    this.showProgress(100);
+                    this.displayResults(result);
+                    this.setStatus('Analysis complete', 'ready');
+                    this.switchTab('output');
+
+                } catch (error) {
+                    console.error('Analysis error:', error);
+                    this.setStatus(`Analysis failed: ${error.message}`, 'error');
+                } finally {
+                    this.isProcessing = false;
+                    this.elements.analyzeBtn.disabled = false;
+                    this.elements.analyzeText.textContent = 'Analyze Conversation';
+                    this.hideProgress();
+                }
+            }
+
+            async generateAnalysis(conversationText) {
+                const prompt = `Analyze the following doctor-patient conversation and provide a structured summary:
+
+1. Identify the patient's main concerns or symptoms
+2. Note any diagnoses or assessments made by the doctor
+3. List any recommended treatments or next steps
+4. Highlight important follow-up information
+
+Conversation:
+${conversationText.substring(0, 500)}...
+
+Analysis Summary:`;
+
+                const maxLength = parseInt(this.elements.maxLength.value);
+                const temperature = parseFloat(this.elements.temperature.value);
+
+                try {
+                    const result = await this.tokenizer(prompt, {
+                        max_new_tokens: Math.min(maxLength, 200),
+                        temperature: temperature,
+                        do_sample: temperature > 0.1,
+                        top_k: 50,
+                        top_p: 0.95,
+                        repetition_penalty: 1.1
+                    });
+
+                    let generatedText = result[0].generated_text;
+                    
+                    // Extract only the new generated text
+                    if (generatedText.includes('Analysis Summary:')) {
+                        const parts = generatedText.split('Analysis Summary:');
+                        generatedText = parts[parts.length - 1];
+                    }
+                    
+                    // Clean up common artifacts
+                    generatedText = generatedText
+                        .replace(/^[\s\n]+/, '')
+                        .replace(/\n{3,}/g, '\n\n')
+                        .trim();
+
+                    if (!generatedText || generatedText.length < 20) {
+                        return "Analysis could not be generated. Please try with different parameters or a shorter conversation.";
+                    }
+
+                    return generatedText;
+
+                } catch (error) {
+                    console.error('Generation error:', error);
+                    throw new Error('Failed to generate analysis. Please try with shorter text or different parameters.');
+                }
+            }
+
+            displayResults(analysisText) {
+                const timestamp = new Date().toLocaleString();
+                const formattedOutput = `=== Conversation Analysis Report ===
+Timestamp: ${timestamp}
+Model: ${this.currentModel}
+
+--- Summary ---
+${analysisText}
+
+--- Parameters Used ---
+Temperature: ${this.elements.temperature.value}
+Max Length: ${this.elements.maxLength.value}
+`;
+
+                this.elements.outputText.value = formattedOutput;
+            }
+
+            setStatus(message, type = 'ready') {
+                this.elements.status.textContent = message;
+                this.elements.status.className = `status ${type}`;
+            }
+
+            showProgress(percentage) {
+                this.elements.progressBar.style.display = 'block';
+                this.elements.progressFill.style.width = `${percentage}%`;
+            }
+
+            hideProgress() {
+                setTimeout(() => {
+                    this.elements.progressBar.style.display = 'none';
+                    this.elements.progressFill.style.width = '0%';
+                }, 500);
+            }
+        }
+
+        // Initialize the application when the page loads
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Wait for transformers to be ready
+            const checkReady = () => {
+                if (window.transformersReady) {
+                    new MedVoiceApp();
+                } else {
+                    setTimeout(checkReady, 100);
+                }
+            };
+            checkReady();
+        });
+    </script>
+</body>
+</html>
