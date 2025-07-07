@@ -9,10 +9,14 @@ const LANGUAGES = {
     "Thai": "th", "Haryanvi": "hi" // Using 'hi' (Hindi) as the code but will handle specially in translation
 };
 
-// Special voice mapping - only Telugu and Bengali have their own voices
+// Special voice mapping with improved Telugu voice options
 const VOICE_MAPPING = {
-    "te": { // Telugu
-        voiceURI: "Google తెలుగు",
+    "te": { // Telugu - multiple options for better compatibility
+        primaryVoice: "Microsoft Chitra - Telugu (India)",
+        fallbackVoices: [
+            "Google తెలుగు",
+            "Microsoft Gopal - Telugu (India)"
+        ],
         lang: "te-IN",
         name: "Telugu"
     },
@@ -98,6 +102,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let voices = [];
     function loadVoices() {
         voices = window.speechSynthesis.getVoices();
+        console.log("Available voices:", voices); // Debug: Log available voices
     }
     speechSynthesis.onvoiceschanged = loadVoices;
     loadVoices();
@@ -292,45 +297,116 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function textToSpeech(text, langCode, langName) {
         return new Promise((resolve) => {
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.rate = 0.9;
-            utterance.pitch = 1;
+            // Wait for voices to be loaded if not already
+            if (speechSynthesis.getVoices().length === 0) {
+                speechSynthesis.onvoiceschanged = function() {
+                    speechSynthesis.onvoiceschanged = null;
+                    doTextToSpeech(text, langCode, langName, resolve);
+                };
+                return;
+            }
+            doTextToSpeech(text, langCode, langName, resolve);
+        });
+    }
+
+    function doTextToSpeech(text, langCode, langName, resolve) {
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 0.9;
+        utterance.pitch = 1;
+        
+        const availableVoices = window.speechSynthesis.getVoices();
+        console.log("Available voices for TTS:", availableVoices); // Debug: Log voices
+        
+        // Special handling for Telugu voices
+        if (langCode === 'te') {
+            console.log("Looking for Telugu voice...");
             
-            // Use Hindi voice for all Indian languages except Telugu and Bengali
-            // For Haryanvi, we'll use Hindi voice but with slight modifications
-            const actualLangCode = (langCode === 'te' || langCode === 'bn') ? langCode : 'hi';
-            const voiceConfig = VOICE_MAPPING[actualLangCode] || VOICE_MAPPING.default;
+            // Try to find the best available Telugu voice
+            let teluguVoice = null;
             
-            const availableVoices = window.speechSynthesis.getVoices();
-            let bestVoice = null;
+            // First try Microsoft Chitra
+            teluguVoice = availableVoices.find(voice => 
+                voice.name.includes("Chitra") && voice.lang.includes("te")
+            );
             
-            // Try to find exact match first
+            // If not found, try any Microsoft Telugu voice
+            if (!teluguVoice) {
+                teluguVoice = availableVoices.find(voice => 
+                    voice.name.includes("Microsoft") && voice.lang.includes("te")
+                );
+            }
+            
+            // If still not found, try Google Telugu
+            if (!teluguVoice) {
+                teluguVoice = availableVoices.find(voice => 
+                    voice.name.includes("Google") && voice.lang.includes("te")
+                );
+            }
+            
+            // Fallback to any Telugu voice
+            if (!teluguVoice) {
+                teluguVoice = availableVoices.find(voice => 
+                    voice.lang.startsWith("te")
+                );
+            }
+            
+            if (teluguVoice) {
+                console.log("Using Telugu voice:", teluguVoice);
+                utterance.voice = teluguVoice;
+                utterance.lang = teluguVoice.lang;
+            } else {
+                console.log("No Telugu voice found, using default");
+                utterance.lang = "te-IN";
+            }
+        } 
+        // For other Indian languages, use appropriate voice
+        else if (langCode === 'hi' || langCode === 'bn') {
+            const voiceConfig = VOICE_MAPPING[langCode];
             if (voiceConfig.voiceURI) {
-                bestVoice = availableVoices.find(voice => 
+                const bestVoice = availableVoices.find(voice => 
                     voice.voiceURI === voiceConfig.voiceURI
                 );
-            }
-            
-            // Then try to find any voice for the language
-            if (!bestVoice) {
-                bestVoice = availableVoices.find(voice => 
-                    voice.lang === voiceConfig.lang || voice.lang.startsWith(actualLangCode)
-                );
-            }
-            
-            // Apply the selected voice
-            if (bestVoice) {
-                utterance.voice = bestVoice;
-                utterance.lang = bestVoice.lang;
+                if (bestVoice) {
+                    utterance.voice = bestVoice;
+                    utterance.lang = bestVoice.lang;
+                } else {
+                    utterance.lang = voiceConfig.lang;
+                }
             } else {
-                utterance.lang = actualLangCode;
+                utterance.lang = langCode + "-IN";
             }
+        } 
+        // For non-Indian languages
+        else {
+            utterance.lang = langCode;
             
-            speechSynthesis.speak(utterance);
-            utterance.onend = () => {
-                resolve();
-            };
+            // Try to find a voice for the target language
+            const targetVoice = availableVoices.find(voice => 
+                voice.lang.startsWith(langCode)
+            );
+            
+            if (targetVoice) {
+                utterance.voice = targetVoice;
+            }
+        }
+        
+        console.log("Final voice settings:", {
+            text: text,
+            lang: utterance.lang,
+            voice: utterance.voice ? utterance.voice.name : 'default'
         });
+        
+        utterance.onerror = (event) => {
+            console.error("SpeechSynthesis error:", event);
+            resolve();
+        };
+        
+        utterance.onend = () => {
+            console.log("SpeechSynthesis complete");
+            resolve();
+        };
+        
+        speechSynthesis.speak(utterance);
     }
 
     async function handleSpeech(speaker) {
